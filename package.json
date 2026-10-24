@@ -19,7 +19,7 @@
   ],
   "exports": {
     ".": "./src/index.ts",
-    "./tui": "./src/tui.tsx"
+    "./tui": "./dist/tui.js"
   },
   "dependencies": {
     "@opencode/plugin": "latest",
