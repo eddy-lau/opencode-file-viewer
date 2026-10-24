@@ -9,6 +9,7 @@ Rendering uses [OpenTUI](https://opentui.com)'s image pipeline: Kitty graphics p
 | Formats | Pipeline | Notes |
 | --- | --- | --- |
 | PNG, JPEG, WebP, GIF | direct render | full fidelity |
+| BMP, TIFF | [mupdf](https://mupdfjs.readthedocs.io) → PNG | decoded once, cached (terminal can't display them natively) |
 | PDF | [mupdf](https://mupdfjs.readthedocs.io) (WASM) | pages render lazily, on demand |
 | EPUB, CBZ | mupdf (WASM) | paged view |
 | DOCX, PPTX, XLSX, DOC, PPT, XLS, ODT, ODS, ODP, RTF, SVG | LibreOffice → PDF → mupdf | requires `soffice` on PATH (`brew install --cask libreoffice`); first conversion takes a few seconds |
@@ -112,7 +113,7 @@ bun run smoke      # conversion pipeline smoke test (fixture paths from argv)
 - The panel is session-scoped: open a session before `/view`
 - The viewer's keymap layer is active while the panel is open; `h/j/k/l` are taken by it
 - mupdf's WASM build has no SVG document handler, so SVG goes through LibreOffice
-- Animated GIFs render as a single frame; BMP/TIFF/HEIC are not handled (use `o` for those)
+- Animated GIFs render as a single frame; HEIC is not handled (mupdf can't decode it — use `o` for visible images)
 - Huge images render at a fixed ~150 DPI target, not terminal pixel density
 - Syntax-highlighted fences cover the bundled Tree-sitter grammars (js/ts/jsx/tsx/md/zig); other languages render plain
 

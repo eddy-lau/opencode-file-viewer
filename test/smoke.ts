@@ -13,6 +13,8 @@ const fixtures: Array<[string, string]> = [
 ]
 
 if (process.argv[3]) fixtures.push(["docx", process.argv[3]])
+if (process.argv[4]) fixtures.push(["bmp", process.argv[4]])
+if (process.argv[5]) fixtures.push(["tiff", process.argv[5]])
 
 let failures = 0
 for (const [label, file] of fixtures) {
