@@ -587,6 +587,36 @@ function Viewer(props) {
         bind: "p",
         run: () => setPage((p) => Math.max(0, p - 1))
       }, {
+        id: `${COMMAND_PREFIX}page.next.arrow`,
+        title: "Next page",
+        bind: "right",
+        run: () => setPage((p) => p + 1)
+      }, {
+        id: `${COMMAND_PREFIX}page.prev.arrow`,
+        title: "Previous page",
+        bind: "left",
+        run: () => setPage((p) => Math.max(0, p - 1))
+      }, {
+        id: `${COMMAND_PREFIX}page.pgdn`,
+        title: "Page down",
+        bind: "pagedown",
+        run: () => {
+          if (content()?.kind === "pages")
+            setPage((p) => p + 1);
+          else
+            scrollbox?.scrollBy(1, "viewport");
+        }
+      }, {
+        id: `${COMMAND_PREFIX}page.pgup`,
+        title: "Page up",
+        bind: "pageup",
+        run: () => {
+          if (content()?.kind === "pages")
+            setPage((p) => Math.max(0, p - 1));
+          else
+            scrollbox?.scrollBy(-1, "viewport");
+        }
+      }, {
         id: `${COMMAND_PREFIX}scroll.down`,
         bind: "j",
         run: () => scrollbox?.scrollBy(3)
@@ -838,7 +868,7 @@ function Viewer(props) {
         return _el$15;
       }
     }), _el$16);
-    _$insertNode(_el$16, _$createTextNode(`h/l page \xB7 j/k scroll \xB7 f fullscreen \xB7 o open \xB7 esc close`));
+    _$insertNode(_el$16, _$createTextNode(`\u2190/\u2192 page \xB7 pgup/dn \xB7 j/k scroll \xB7 f full \xB7 o open \xB7 esc close`));
     _$setProp(_el$16, "fg", "#484f58");
     return _el$;
   })();

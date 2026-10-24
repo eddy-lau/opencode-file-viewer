@@ -178,6 +178,31 @@ function Viewer(props: { panel: PanelInput }) {
           bind: "p",
           run: () => setPage((p) => Math.max(0, p - 1)),
         },
+        { id: `${COMMAND_PREFIX}page.next.arrow`, title: "Next page", bind: "right", run: () => setPage((p) => p + 1) },
+        {
+          id: `${COMMAND_PREFIX}page.prev.arrow`,
+          title: "Previous page",
+          bind: "left",
+          run: () => setPage((p) => Math.max(0, p - 1)),
+        },
+        {
+          id: `${COMMAND_PREFIX}page.pgdn`,
+          title: "Page down",
+          bind: "pagedown",
+          run: () => {
+            if (content()?.kind === "pages") setPage((p) => p + 1)
+            else scrollbox?.scrollBy(1, "viewport")
+          },
+        },
+        {
+          id: `${COMMAND_PREFIX}page.pgup`,
+          title: "Page up",
+          bind: "pageup",
+          run: () => {
+            if (content()?.kind === "pages") setPage((p) => Math.max(0, p - 1))
+            else scrollbox?.scrollBy(-1, "viewport")
+          },
+        },
         { id: `${COMMAND_PREFIX}scroll.down`, bind: "j", run: () => scrollbox?.scrollBy(3) },
         { id: `${COMMAND_PREFIX}scroll.up`, bind: "k", run: () => scrollbox?.scrollBy(-3) },
         { id: `${COMMAND_PREFIX}scroll.top`, bind: "g", run: () => scrollbox?.scrollTo(0) },
@@ -323,7 +348,7 @@ function Viewer(props: { panel: PanelInput }) {
         <Show when={pageInfo()}>
           <text fg="#f0f6fc">{pageInfo()}</text>
         </Show>
-        <text fg="#484f58">h/l page · j/k scroll · f fullscreen · o open · esc close</text>
+        <text fg="#484f58">←/→ page · pgup/dn · j/k scroll · f full · o open · esc close</text>
       </box>
     </box>
   )
