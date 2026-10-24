@@ -12,7 +12,6 @@ import { createComponent as _$createComponent } from "@opentui/solid";
 import { readdir as readdir2, stat as stat5 } from "fs/promises";
 import os2 from "os";
 import path3 from "path";
-import { fileURLToPath } from "url";
 import { Plugin, usePlugin } from "@opencode/plugin/tui";
 import { SyntaxStyle } from "@opentui/core";
 import { Match, Show, Switch, createEffect, createSignal, onCleanup, onMount } from "solid-js";
@@ -342,68 +341,9 @@ function pickHandler(file) {
 // src/tui.tsx
 var PANEL_NAME = "fileviewer.view";
 var COMMAND_PREFIX = "fileviewer.";
-var ASK_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "pdf", "epub", "cbz", "docx", "doc", "pptx", "ppt", "xlsx", "xls", "odt", "ods", "odp", "rtf", "svg", "md", "markdown", "mdx"];
-var ASK_COOLDOWN_MS = 60000;
 function expandPath(raw, base) {
   const expanded = raw.startsWith("~") ? path3.join(os2.homedir(), raw.slice(1)) : raw;
   return path3.resolve(base ?? process.cwd(), expanded);
-}
-async function isFile(file) {
-  try {
-    return (await stat5(file)).isFile();
-  } catch {
-    return false;
-  }
-}
-async function requestOpen(context, file) {
-  if (!await isFile(file)) {
-    context.ui.toast.show({
-      title: "File viewer",
-      message: `${file}: not found`,
-      variant: "error"
-    });
-    return;
-  }
-  setCurrentFile(file);
-  const opened = context.ui.panel.open(PANEL_NAME);
-  if (!opened) {
-    context.ui.toast.show({
-      title: "File viewer",
-      message: "Open a session first \u2014 the viewer panel is session-scoped",
-      variant: "warning"
-    });
-  }
-}
-function candidatePaths(event) {
-  const out = [];
-  const data = event.data;
-  if (Array.isArray(data.content)) {
-    for (const part of data.content) {
-      if (part?.type === "file" && typeof part.uri === "string" && part.uri.startsWith("file://")) {
-        try {
-          out.push(fileURLToPath(part.uri));
-        } catch {}
-      } else if (part?.type === "text" && typeof part.text === "string") {
-        for (const match of part.text.matchAll(/(?:\/|\.{1,2}\/|~\/)[^\s`"'<>|*?\\]+/g))
-          out.push(match[0]);
-      }
-    }
-  }
-  const meta = data.metadata;
-  if (meta && typeof meta === "object") {
-    for (const key of ["filePath", "path", "file"]) {
-      const value = meta[key];
-      if (typeof value === "string")
-        out.push(value);
-    }
-  }
-  return out;
-}
-function hasAskExtension(context, file, askExtensions) {
-  const ext = file.split(".").pop()?.toLowerCase();
-  if (ext === undefined || !askExtensions.has(ext))
-    return;
-  return path3.isAbsolute(file) ? file : path3.resolve(context.location?.directory ?? process.cwd(), file);
 }
 async function pickFile(directory, context) {
   const dir = directory ?? process.cwd();
@@ -435,9 +375,6 @@ async function pickFile(directory, context) {
 var tui_default = Plugin.define({
   id: "opencode.file-viewer.tui",
   setup(context) {
-    const options = context.options;
-    const askEnabled = options.ask !== false;
-    const askExtensions = new Set(Array.isArray(options.extensions) && options.extensions.length > 0 ? options.extensions.map((ext) => ext.toLowerCase()) : ASK_EXTENSIONS);
     context.keymap.layer(() => ({
       mode: "global",
       priority: 10,
@@ -457,43 +394,30 @@ var tui_default = Plugin.define({
           const file = raw ? expandPath(raw, context.location?.directory) : await pickFile(context.location?.directory, context);
           if (!file)
             return;
-          await requestOpen(context, file);
+          try {
+            const info = await stat5(file);
+            if (!info.isFile())
+              throw new Error("not a file");
+          } catch (error) {
+            context.ui.toast.show({
+              title: "File viewer",
+              message: `${file}: ${error instanceof Error ? error.message : "not found"}`,
+              variant: "error"
+            });
+            return;
+          }
+          setCurrentFile(file);
+          const opened = context.ui.panel.open(PANEL_NAME);
+          if (!opened) {
+            context.ui.toast.show({
+              title: "File viewer",
+              message: "Open a session first \u2014 the viewer panel is session-scoped",
+              variant: "warning"
+            });
+          }
         }
       }]
     }));
-    let asking = false;
-    const lastAsked = new Map;
-    const unsubscribeAsk = context.data.on("session.tool.success", async (event) => {
-      if (!askEnabled || asking)
-        return;
-      for (const candidate of candidatePaths(event)) {
-        const file = hasAskExtension(context, candidate, askExtensions);
-        if (!file || !await isFile(file))
-          continue;
-        const viewed = currentFile();
-        if (viewed === file && context.ui.panel.current())
-          continue;
-        const previous = lastAsked.get(file) ?? 0;
-        if (Date.now() - previous < ASK_COOLDOWN_MS)
-          continue;
-        lastAsked.set(file, Date.now());
-        asking = true;
-        context.ui.dialog.confirm({
-          title: "View file?",
-          message: `${path3.basename(file)} was just written by the agent`,
-          label: {
-            confirm: "View",
-            cancel: "Dismiss"
-          }
-        }).then((confirmed) => {
-          if (confirmed)
-            return requestOpen(context, file);
-        }).finally(() => {
-          asking = false;
-        });
-        break;
-      }
-    });
     context.ui.slot({
       append: "session.panel",
       render: (panel) => _$createComponent(Show, {
@@ -507,7 +431,6 @@ var tui_default = Plugin.define({
         }
       })
     });
-    return () => unsubscribeAsk();
   }
 });
 var [currentFile, setCurrentFile] = createSignal();

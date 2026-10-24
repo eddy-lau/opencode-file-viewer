@@ -1,9 +1,8 @@
 import { readdir, stat } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
 import { Plugin, usePlugin } from "@opencode/plugin/tui"
-import type { Context, PanelInput } from "@opencode/plugin/tui/context"
+import type { PanelInput } from "@opencode/plugin/tui/context"
 import { SyntaxStyle, type ScrollBoxRenderable } from "@opentui/core"
 import { For, Match, Show, Switch, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { knownExtensions, pickHandler } from "./handlers/registry"
@@ -12,104 +11,9 @@ import type { ViewContent } from "./handlers/types"
 const PANEL_NAME = "fileviewer.view"
 const COMMAND_PREFIX = "fileviewer."
 
-/**
- * Extensions that trigger the "just written — view it?" dialog. Deliberately
- * excludes the `code` and `data` handlers: the agent edits source files
- * constantly, and asking after every edit would be noise. Those stay
- * available through /view.
- */
-const ASK_EXTENSIONS = [
-  "png",
-  "jpg",
-  "jpeg",
-  "webp",
-  "gif",
-  "pdf",
-  "epub",
-  "cbz",
-  "docx",
-  "doc",
-  "pptx",
-  "ppt",
-  "xlsx",
-  "xls",
-  "odt",
-  "ods",
-  "odp",
-  "rtf",
-  "svg",
-  "md",
-  "markdown",
-  "mdx",
-] as const
-
-const ASK_COOLDOWN_MS = 60_000
-
 function expandPath(raw: string, base: string | undefined): string {
   const expanded = raw.startsWith("~") ? path.join(os.homedir(), raw.slice(1)) : raw
   return path.resolve(base ?? process.cwd(), expanded)
-}
-
-async function isFile(file: string): Promise<boolean> {
-  try {
-    return (await stat(file)).isFile()
-  } catch {
-    return false
-  }
-}
-
-/** Validates and opens a file in the viewer panel; toasts on failure. */
-async function requestOpen(context: Context, file: string): Promise<void> {
-  if (!(await isFile(file))) {
-    context.ui.toast.show({ title: "File viewer", message: `${file}: not found`, variant: "error" })
-    return
-  }
-  setCurrentFile(file)
-  const opened = context.ui.panel.open(PANEL_NAME)
-  if (!opened) {
-    context.ui.toast.show({
-      title: "File viewer",
-      message: "Open a session first — the viewer panel is session-scoped",
-      variant: "warning",
-    })
-  }
-}
-
-/**
- * Pulls candidate file paths out of a tool-success event: file parts carry
- * file:// uris, text output (write/edit) tends to mention the path, and some
- * tools expose it through metadata.
- */
-function candidatePaths(event: { data: { content: unknown; metadata?: unknown } }): string[] {
-  const out: string[] = []
-  const data = event.data
-  if (Array.isArray(data.content)) {
-    for (const part of data.content) {
-      if (part?.type === "file" && typeof part.uri === "string" && part.uri.startsWith("file://")) {
-        try {
-          out.push(fileURLToPath(part.uri))
-        } catch {
-          // not a file uri after all
-        }
-      } else if (part?.type === "text" && typeof part.text === "string") {
-        for (const match of part.text.matchAll(/(?:\/|\.{1,2}\/|~\/)[^\s`"'<>|*?\\]+/g)) out.push(match[0])
-      }
-    }
-  }
-  const meta = data.metadata
-  if (meta && typeof meta === "object") {
-    for (const key of ["filePath", "path", "file"]) {
-      const value = (meta as Record<string, unknown>)[key]
-      if (typeof value === "string") out.push(value)
-    }
-  }
-  return out
-}
-
-function hasAskExtension(context: Context, file: string, askExtensions: ReadonlySet<string>): string | undefined {
-  const ext = file.split(".").pop()?.toLowerCase()
-  if (ext === undefined || !askExtensions.has(ext)) return undefined
-  return path.isAbsolute(file) ? file : path.resolve(context.location?.directory ?? process.cwd(), file)
 }
 
 /** File picker over the current location, limited to formats with a dedicated handler. */
@@ -138,14 +42,6 @@ async function pickFile(
 export default Plugin.define({
   id: "opencode.file-viewer.tui",
   setup(context) {
-    const options = context.options as { ask?: boolean; extensions?: readonly string[] }
-    const askEnabled = options.ask !== false
-    const askExtensions = new Set<string>(
-      Array.isArray(options.extensions) && options.extensions.length > 0
-        ? options.extensions.map((ext) => ext.toLowerCase())
-        : ASK_EXTENSIONS,
-    )
-
     context.keymap.layer(() => ({
       mode: "global",
       priority: 10,
@@ -164,44 +60,32 @@ export default Plugin.define({
               ? expandPath(raw, context.location?.directory)
               : await pickFile(context.location?.directory, context)
             if (!file) return
-            await requestOpen(context, file)
+
+            try {
+              const info = await stat(file)
+              if (!info.isFile()) throw new Error("not a file")
+            } catch (error) {
+              context.ui.toast.show({
+                title: "File viewer",
+                message: `${file}: ${error instanceof Error ? error.message : "not found"}`,
+                variant: "error",
+              })
+              return
+            }
+
+            setCurrentFile(file)
+            const opened = context.ui.panel.open(PANEL_NAME)
+            if (!opened) {
+              context.ui.toast.show({
+                title: "File viewer",
+                message: "Open a session first — the viewer panel is session-scoped",
+                variant: "warning",
+              })
+            }
           },
         },
       ],
     }))
-
-    // Offer to view files the agent just wrote (artifact formats only).
-    let asking = false
-    const lastAsked = new Map<string, number>()
-    const unsubscribeAsk = context.data.on("session.tool.success", async (event) => {
-      if (!askEnabled || asking) return
-      for (const candidate of candidatePaths(event)) {
-        const file = hasAskExtension(context, candidate, askExtensions)
-        if (!file || !(await isFile(file))) continue
-
-        const viewed = currentFile()
-        if (viewed === file && context.ui.panel.current()) continue // already on screen
-
-        const previous = lastAsked.get(file) ?? 0
-        if (Date.now() - previous < ASK_COOLDOWN_MS) continue
-        lastAsked.set(file, Date.now())
-
-        asking = true
-        void context.ui.dialog
-          .confirm({
-            title: "View file?",
-            message: `${path.basename(file)} was just written by the agent`,
-            label: { confirm: "View", cancel: "Dismiss" },
-          })
-          .then((confirmed) => {
-            if (confirmed) return requestOpen(context, file)
-          })
-          .finally(() => {
-            asking = false
-          })
-        break // at most one offer per tool call
-      }
-    })
 
     context.ui.slot({
       append: "session.panel",
@@ -211,8 +95,6 @@ export default Plugin.define({
         </Show>
       ),
     })
-
-    return () => unsubscribeAsk()
   },
 })
 
