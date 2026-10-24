@@ -279,11 +279,15 @@ var markdownHandler = {
 };
 
 // src/handlers/office.ts
+import { existsSync } from "fs";
 import { stat as stat4 } from "fs/promises";
 import path2 from "path";
 var EXTENSIONS5 = ["docx", "doc", "pptx", "ppt", "xlsx", "xls", "odt", "ods", "odp", "rtf", "svg"];
 function sofficeBinary() {
-  return Bun.which("soffice") ?? "/Applications/LibreOffice.app/Contents/MacOS/soffice";
+  return Bun.which("soffice") ?? (process.platform === "win32" ? [
+    path2.join(process.env["PROGRAMFILES"] ?? "C:\\Program Files", "LibreOffice", "program", "soffice.exe"),
+    path2.join(process.env["PROGRAMFILES(X86)"] ?? "C:\\Program Files (x86)", "LibreOffice", "program", "soffice.exe")
+  ].find((candidate) => existsSync(candidate)) : "/Applications/LibreOffice.app/Contents/MacOS/soffice");
 }
 async function convertToPdf(file, key) {
   const base = path2.basename(file, path2.extname(file));
@@ -695,11 +699,13 @@ function Viewer(props) {
         bind: "o",
         run: () => {
           const file = currentFile();
-          if (file)
-            Bun.spawn(["open", file], {
-              stdout: "ignore",
-              stderr: "ignore"
-            });
+          if (!file)
+            return;
+          const command = process.platform === "darwin" ? ["open", file] : process.platform === "win32" ? ["cmd", "/c", "start", "", file] : ["xdg-open", file];
+          Bun.spawn(command, {
+            stdout: "ignore",
+            stderr: "ignore"
+          });
         }
       }, {
         id: `${COMMAND_PREFIX}close`,

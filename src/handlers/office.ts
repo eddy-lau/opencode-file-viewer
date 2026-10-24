@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs"
 import { stat } from "node:fs/promises"
 import path from "node:path"
 import { cacheDir, cachedFile, fileKey } from "../lib/cache"
@@ -7,7 +8,15 @@ import type { ViewerHandler } from "./types"
 const EXTENSIONS = ["docx", "doc", "pptx", "ppt", "xlsx", "xls", "odt", "ods", "odp", "rtf", "svg"] as const
 
 function sofficeBinary(): string | undefined {
-  return Bun.which("soffice") ?? "/Applications/LibreOffice.app/Contents/MacOS/soffice"
+  return (
+    Bun.which("soffice") ??
+    (process.platform === "win32"
+      ? [
+          path.join(process.env["PROGRAMFILES"] ?? "C:\\Program Files", "LibreOffice", "program", "soffice.exe"),
+          path.join(process.env["PROGRAMFILES(X86)"] ?? "C:\\Program Files (x86)", "LibreOffice", "program", "soffice.exe"),
+        ].find((candidate) => existsSync(candidate))
+      : "/Applications/LibreOffice.app/Contents/MacOS/soffice")
+  )
 }
 
 async function convertToPdf(file: string, key: string): Promise<string> {

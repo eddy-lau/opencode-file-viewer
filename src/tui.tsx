@@ -252,7 +252,14 @@ function Viewer(props: { panel: PanelInput }) {
           bind: "o",
           run: () => {
             const file = currentFile()
-            if (file) Bun.spawn(["open", file], { stdout: "ignore", stderr: "ignore" })
+            if (!file) return
+            const command =
+              process.platform === "darwin"
+                ? ["open", file]
+                : process.platform === "win32"
+                  ? ["cmd", "/c", "start", "", file]
+                  : ["xdg-open", file]
+            Bun.spawn(command, { stdout: "ignore", stderr: "ignore" })
           },
         },
         { id: `${COMMAND_PREFIX}close`, title: "Close viewer", bind: "escape", run: () => props.panel.close() },
