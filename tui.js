@@ -338,12 +338,54 @@ function pickHandler(file) {
   return handlers.find((handler) => ext !== undefined && handler.extensions.includes(ext)) ?? codeHandler;
 }
 
+// src/rpc.ts
+var FileViewerRpc = {
+  id: "file-viewer",
+  methods: {},
+  events: {
+    requested: {
+      schema: {
+        type: "object",
+        properties: { path: { type: "string" } },
+        required: ["path"],
+        additionalProperties: false
+      }
+    }
+  }
+};
+
 // src/tui.tsx
 var PANEL_NAME = "fileviewer.view";
 var COMMAND_PREFIX = "fileviewer.";
 function expandPath(raw, base) {
   const expanded = raw.startsWith("~") ? path3.join(os2.homedir(), raw.slice(1)) : raw;
   return path3.resolve(base ?? process.cwd(), expanded);
+}
+async function isFile(file) {
+  try {
+    return (await stat5(file)).isFile();
+  } catch {
+    return false;
+  }
+}
+async function requestOpen(context, file) {
+  if (!await isFile(file)) {
+    context.ui.toast.show({
+      title: "File viewer",
+      message: `${file}: not found`,
+      variant: "error"
+    });
+    return;
+  }
+  setCurrentFile(file);
+  const opened = context.ui.panel.open(PANEL_NAME);
+  if (!opened) {
+    context.ui.toast.show({
+      title: "File viewer",
+      message: "Open a session first \u2014 the viewer panel is session-scoped",
+      variant: "warning"
+    });
+  }
 }
 async function pickFile(directory, context) {
   const dir = directory ?? process.cwd();
@@ -394,27 +436,7 @@ var tui_default = Plugin.define({
           const file = raw ? expandPath(raw, context.location?.directory) : await pickFile(context.location?.directory, context);
           if (!file)
             return;
-          try {
-            const info = await stat5(file);
-            if (!info.isFile())
-              throw new Error("not a file");
-          } catch (error) {
-            context.ui.toast.show({
-              title: "File viewer",
-              message: `${file}: ${error instanceof Error ? error.message : "not found"}`,
-              variant: "error"
-            });
-            return;
-          }
-          setCurrentFile(file);
-          const opened = context.ui.panel.open(PANEL_NAME);
-          if (!opened) {
-            context.ui.toast.show({
-              title: "File viewer",
-              message: "Open a session first \u2014 the viewer panel is session-scoped",
-              variant: "warning"
-            });
-          }
+          await requestOpen(context, file);
         }
       }]
     }));
@@ -431,6 +453,16 @@ var tui_default = Plugin.define({
         }
       })
     });
+    const fileViewer = context.client.rpc(FileViewerRpc);
+    const unsubscribeRpc = fileViewer.events.on("requested", async (event) => {
+      const here = context.location?.directory;
+      if (here && event.location?.directory && event.location.directory !== here)
+        return;
+      const file = event.data.path;
+      if (await isFile(file))
+        await requestOpen(context, file);
+    });
+    return () => unsubscribeRpc();
   }
 });
 var [currentFile, setCurrentFile] = createSignal();

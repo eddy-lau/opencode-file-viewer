@@ -6,6 +6,7 @@ import type { PanelInput } from "@opencode/plugin/tui/context"
 import { SyntaxStyle, type ScrollBoxRenderable } from "@opentui/core"
 import { For, Match, Show, Switch, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { knownExtensions, pickHandler } from "./handlers/registry"
+import { FileViewerRpc } from "./rpc"
 import type { ViewContent } from "./handlers/types"
 
 const PANEL_NAME = "fileviewer.view"
@@ -14,6 +15,31 @@ const COMMAND_PREFIX = "fileviewer."
 function expandPath(raw: string, base: string | undefined): string {
   const expanded = raw.startsWith("~") ? path.join(os.homedir(), raw.slice(1)) : raw
   return path.resolve(base ?? process.cwd(), expanded)
+}
+
+async function isFile(file: string): Promise<boolean> {
+  try {
+    return (await stat(file)).isFile()
+  } catch {
+    return false
+  }
+}
+
+/** Validates and opens a file in the viewer panel; toasts on failure. */
+async function requestOpen(context: ReturnType<typeof usePlugin>, file: string): Promise<void> {
+  if (!(await isFile(file))) {
+    context.ui.toast.show({ title: "File viewer", message: `${file}: not found`, variant: "error" })
+    return
+  }
+  setCurrentFile(file)
+  const opened = context.ui.panel.open(PANEL_NAME)
+  if (!opened) {
+    context.ui.toast.show({
+      title: "File viewer",
+      message: "Open a session first — the viewer panel is session-scoped",
+      variant: "warning",
+    })
+  }
 }
 
 /** File picker over the current location, limited to formats with a dedicated handler. */
@@ -60,28 +86,7 @@ export default Plugin.define({
               ? expandPath(raw, context.location?.directory)
               : await pickFile(context.location?.directory, context)
             if (!file) return
-
-            try {
-              const info = await stat(file)
-              if (!info.isFile()) throw new Error("not a file")
-            } catch (error) {
-              context.ui.toast.show({
-                title: "File viewer",
-                message: `${file}: ${error instanceof Error ? error.message : "not found"}`,
-                variant: "error",
-              })
-              return
-            }
-
-            setCurrentFile(file)
-            const opened = context.ui.panel.open(PANEL_NAME)
-            if (!opened) {
-              context.ui.toast.show({
-                title: "File viewer",
-                message: "Open a session first — the viewer panel is session-scoped",
-                variant: "warning",
-              })
-            }
+            await requestOpen(context, file)
           },
         },
       ],
@@ -95,6 +100,17 @@ export default Plugin.define({
         </Show>
       ),
     })
+
+    // Agent-side `view` tool → server RPC event → open the panel here.
+    const fileViewer = context.client.rpc(FileViewerRpc)
+    const unsubscribeRpc = fileViewer.events.on("requested", async (event) => {
+      const here = context.location?.directory
+      if (here && event.location?.directory && event.location.directory !== here) return
+      const file = (event.data as { path: string }).path
+      if (await isFile(file)) await requestOpen(context, file)
+    })
+
+    return () => unsubscribeRpc()
   },
 })
 
