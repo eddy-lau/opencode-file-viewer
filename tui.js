@@ -258,23 +258,47 @@ var documentHandler = {
 };
 
 // src/handlers/image.ts
-var EXTENSIONS3 = ["png", "jpg", "jpeg", "webp", "gif"];
+import { readFile as readFile4 } from "fs/promises";
+import * as mupdf2 from "mupdf";
+var NATIVE = new Set(["png", "jpg", "jpeg", "webp", "gif"]);
+var EXTENSIONS3 = [...NATIVE, "bmp", "tif", "tiff"];
 var imageHandler = {
   id: "image",
   extensions: EXTENSIONS3,
   async load(path) {
-    return { kind: "image", path };
+    const ext = path.split(".").pop()?.toLowerCase();
+    if (ext !== undefined && NATIVE.has(ext))
+      return { kind: "image", path };
+    return { kind: "image", path: await decodedPng(path) };
   }
 };
+async function decodedPng(file) {
+  const key = await fileKey(file);
+  const cached = await cachedFile(key, "decoded.png");
+  if (cached)
+    return cached;
+  pruneCache();
+  const image = new mupdf2.Image(await readFile4(file));
+  try {
+    const pixmap = image.toPixmap();
+    try {
+      return await writeCacheFile(key, "decoded.png", pixmap.asPNG());
+    } finally {
+      pixmap.destroy();
+    }
+  } finally {
+    image.destroy();
+  }
+}
 
 // src/handlers/markdown.ts
-import { readFile as readFile4 } from "fs/promises";
+import { readFile as readFile5 } from "fs/promises";
 var EXTENSIONS4 = ["md", "markdown", "mdx"];
 var markdownHandler = {
   id: "markdown",
   extensions: EXTENSIONS4,
   async load(path) {
-    return { kind: "markdown", content: await readFile4(path, "utf8") };
+    return { kind: "markdown", content: await readFile5(path, "utf8") };
   }
 };
 
