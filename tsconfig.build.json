@@ -1,0 +1,4 @@
+{
+  "//": "Intentionally minimal: build.ts overrides tsconfig with this so Bun's builtin JSX transform (which would use React semantics) stands down and @opentui/solid's babel plugin does the real JSX lowering.",
+  "compilerOptions": {}
+}
