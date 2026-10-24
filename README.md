@@ -63,6 +63,15 @@ Formats are handled by a small registry (`src/handlers/`). Each handler maps a f
 
 Conversions are cached under `os.tmpdir()/opencode-file-viewer/<sha1(path+mtime+size)>/` and pruned after 7 days. Editing a file invalidates its cache automatically.
 
+## Development
+
+The TUI entry ships **precompiled** (`dist/tui.js`) — OpenCode's plugin loader transpiles plugin TSX with default React JSX and ignores per-plugin tsconfigs, so raw `.tsx` fails to load. After editing `src/tui.tsx`:
+
+```sh
+bun run build && git add -A && git commit -m "..." && git push
+opencode plugin update   # re-resolves the pinned Git install
+```
+
 ## Requirements
 
 - OpenCode V2 with its bundled Bun runtime

@@ -21,6 +21,10 @@
     ".": "./src/index.ts",
     "./tui": "./dist/tui.js"
   },
+  "scripts": {
+    "build": "bun build src/tui.tsx --outfile dist/tui.js --packages external --target bun",
+    "smoke": "bun test/smoke.ts"
+  },
   "dependencies": {
     "@opencode/plugin": "latest",
     "mupdf": "^1.28.1"
