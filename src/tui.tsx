@@ -205,6 +205,24 @@ function Viewer(props: { panel: PanelInput }) {
         },
         { id: `${COMMAND_PREFIX}scroll.down`, bind: "j", run: () => scrollbox?.scrollBy(3) },
         { id: `${COMMAND_PREFIX}scroll.up`, bind: "k", run: () => scrollbox?.scrollBy(-3) },
+        {
+          id: `${COMMAND_PREFIX}scroll.down.arrow`,
+          title: "Scroll down",
+          bind: "down",
+          run: () => {
+            if (content()?.kind === "pages") setPage((p) => p + 1)
+            else scrollbox?.scrollBy(3)
+          },
+        },
+        {
+          id: `${COMMAND_PREFIX}scroll.up.arrow`,
+          title: "Scroll up",
+          bind: "up",
+          run: () => {
+            if (content()?.kind === "pages") setPage((p) => Math.max(0, p - 1))
+            else scrollbox?.scrollBy(-3)
+          },
+        },
         { id: `${COMMAND_PREFIX}scroll.top`, bind: "g", run: () => scrollbox?.scrollTo(0) },
         {
           id: `${COMMAND_PREFIX}scroll.bottom`,
@@ -348,7 +366,7 @@ function Viewer(props: { panel: PanelInput }) {
         <Show when={pageInfo()}>
           <text fg="#f0f6fc">{pageInfo()}</text>
         </Show>
-        <text fg="#484f58">←/→ page · pgup/dn · j/k scroll · f full · o open · esc close</text>
+        <text fg="#484f58">←→ page · ↑↓/j-k scroll · pgup/dn · f full · o open · esc close</text>
       </box>
     </box>
   )

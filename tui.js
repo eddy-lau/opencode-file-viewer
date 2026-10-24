@@ -625,6 +625,26 @@ function Viewer(props) {
         bind: "k",
         run: () => scrollbox?.scrollBy(-3)
       }, {
+        id: `${COMMAND_PREFIX}scroll.down.arrow`,
+        title: "Scroll down",
+        bind: "down",
+        run: () => {
+          if (content()?.kind === "pages")
+            setPage((p) => p + 1);
+          else
+            scrollbox?.scrollBy(3);
+        }
+      }, {
+        id: `${COMMAND_PREFIX}scroll.up.arrow`,
+        title: "Scroll up",
+        bind: "up",
+        run: () => {
+          if (content()?.kind === "pages")
+            setPage((p) => Math.max(0, p - 1));
+          else
+            scrollbox?.scrollBy(-3);
+        }
+      }, {
         id: `${COMMAND_PREFIX}scroll.top`,
         bind: "g",
         run: () => scrollbox?.scrollTo(0)
@@ -868,7 +888,7 @@ function Viewer(props) {
         return _el$15;
       }
     }), _el$16);
-    _$insertNode(_el$16, _$createTextNode(`\u2190/\u2192 page \xB7 pgup/dn \xB7 j/k scroll \xB7 f full \xB7 o open \xB7 esc close`));
+    _$insertNode(_el$16, _$createTextNode(`\u2190\u2192 page \xB7 \u2191\u2193/j-k scroll \xB7 pgup/dn \xB7 f full \xB7 o open \xB7 esc close`));
     _$setProp(_el$16, "fg", "#484f58");
     return _el$;
   })();
