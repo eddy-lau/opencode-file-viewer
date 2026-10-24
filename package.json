@@ -19,10 +19,10 @@
   ],
   "exports": {
     ".": "./src/index.ts",
-    "./tui": "./dist/tui.js"
+    "./tui": "./tui.js"
   },
   "scripts": {
-    "build": "bun build src/tui.tsx --outfile dist/tui.js --packages external --target bun",
+    "build": "bun build.ts",
     "smoke": "bun test/smoke.ts"
   },
   "dependencies": {
