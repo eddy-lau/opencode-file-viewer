@@ -8,16 +8,17 @@ Rendering uses [OpenTUI](https://opentui.com)'s image pipeline: Kitty graphics p
 
 | Formats | Pipeline | Notes |
 | --- | --- | --- |
-| PNG, JPEG, WebP, GIF | direct render | full fidelity |
+| PNG, JPEG, WebP, GIF | direct render | full fidelity; animated GIFs autoplay in-panel |
 | BMP, TIFF | [mupdf](https://mupdfjs.readthedocs.io) → PNG | decoded once, cached (terminal can't display them natively) |
 | PDF | [mupdf](https://mupdfjs.readthedocs.io) (WASM) | pages render lazily, on demand |
 | EPUB, CBZ | mupdf (WASM) | paged view |
 | DOCX, PPTX, XLSX, DOC, PPT, XLS, ODT, ODS, ODP, RTF, SVG | LibreOffice → PDF → mupdf | requires `soffice` on PATH (`brew install --cask libreoffice`); first conversion takes a few seconds |
 | Markdown | native OpenTUI renderer | with syntax-highlighted fences |
-| JS/TS/JSX/TSX/Zig + any text file | Tree-sitter or plain text | bundled grammars highlighted |
+| JS/TS/JSX/TSX/Zig (bundled) + Python, Rust, C/C++, Go, Java, Kotlin, Swift, Objective-C, JSON, YAML, TOML | Tree-sitter | highlighted; any other text file renders plain |
 | CSV, TSV | aligned monospace table | quoted cells handled |
 | JSON | pretty-printed | |
 | unknown / binary | text or hex dump | |
+| HEIC | — | not supported (use `o` to open externally) |
 
 ## Install
 
@@ -83,10 +84,11 @@ Two halves in one package (both loaded as one plugin):
 
 Formats are handled by a small registry (`src/handlers/`). Each handler maps a file to one of four content kinds the panel renders:
 
-- `image` — a single image path, rendered via `<image>`
+- `image` — a single image path, rendered via `<image>` (BMP/TIFF decode to cached PNG, capped at terminal pixel geometry; animated GIFs decode to per-frame PNGs via `omggif` and autoplay)
 - `pages` — lazy per-page PNGs (PDF/EPUB/office), rendered via `<image>` with paging
+- `animation` — decoded GIF frames; the panel advances on the GIF's own delays, `←→` step manually
 - `markdown` — raw markdown, rendered via `<markdown>`
-- `code` — source or text, rendered via `<code>` (with optional Tree-sitter filetype)
+- `code` — source or text, rendered via `<code>` (Tree-sitter filetypes: OpenTUI's six plus the runtime-registered set in `src/lib/grammars.ts`, wasm+queries committed under `assets/grammars/` — provenance in `assets/grammars/SOURCES.md`)
 
 Handlers are order-sensitive: the `code` handler claims every text extension and must stay last. Adding format support = new handler + registry entry.
 
@@ -112,9 +114,9 @@ bun run smoke      # conversion pipeline smoke test (fixture paths from argv)
 
 - The panel is session-scoped: open a session before `/view`
 - The viewer's keymap layer is active while the panel is open; `h/j/k/l` are taken by it
-- mupdf's WASM build has no SVG document handler, so SVG goes through LibreOffice
-- Animated GIFs render as a single frame; HEIC is not handled (mupdf can't decode it — use `o` for visible images)
-- Huge images render at a fixed ~150 DPI target, not terminal pixel density
+- mupdf's WASM build has no SVG document handler, so SVG goes through LibreOffice- Animated GIFs autoplay (decoded per-frame; frames capped at 240 for pathological files)
+- HEIC is not handled (mupdf can't decode it — use `o` for those)
+- Native images (PNG/JPEG/WebP/GIF) render pass-through at full resolution scaled to fit; BMP/TIFF decodes are capped at the terminal's pixel geometry (fallback ~1400px)
 - Syntax-highlighted fences cover the bundled Tree-sitter grammars (js/ts/jsx/tsx/md/zig); other languages render plain
 
 ## Roadmap

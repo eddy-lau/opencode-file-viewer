@@ -2,7 +2,8 @@ import { readFile, stat } from "node:fs/promises"
 import { looksBinary } from "../lib/binary"
 import type { ViewerHandler } from "./types"
 
-/** Languages bundled with OpenTUI's Tree-sitter; everything else renders unstyled. */
+/** Languages bundled with OpenTUI's Tree-sitter (js/ts/jsx/tsx/md/zig) plus the
+ * runtime-registered ones in src/lib/grammars.ts; everything else renders unstyled. */
 const FILETYPES: Record<string, string> = {
   js: "javascript",
   mjs: "javascript",
@@ -14,6 +15,27 @@ const FILETYPES: Record<string, string> = {
   tsx: "typescriptreact",
   md: "markdown",
   zig: "zig",
+  // registered at runtime from assets/grammars/ + tree-sitter-wasms
+  py: "python",
+  rs: "rust",
+  c: "c",
+  h: "c",
+  cpp: "cpp",
+  cc: "cpp",
+  cxx: "cpp",
+  hpp: "cpp",
+  hh: "cpp",
+  hxx: "cpp",
+  go: "go",
+  java: "java",
+  kt: "kotlin",
+  kts: "kotlin",
+  swift: "swift",
+  m: "objc",
+  mm: "objc",
+  yaml: "yaml",
+  yml: "yaml",
+  toml: "toml",
 }
 
 function hexdump(buf: Uint8Array, limit = 4096): string {

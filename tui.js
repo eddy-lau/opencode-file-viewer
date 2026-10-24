@@ -9,9 +9,9 @@ import { memo as _$memo } from "@opentui/solid";
 import { setProp as _$setProp } from "@opentui/solid";
 import { createElement as _$createElement } from "@opentui/solid";
 import { createComponent as _$createComponent } from "@opentui/solid";
-import { readdir as readdir2, stat as stat5 } from "fs/promises";
+import { readdir as readdir2, stat as stat6 } from "fs/promises";
 import os2 from "os";
-import path3 from "path";
+import path4 from "path";
 import { Plugin, usePlugin } from "@opencode/plugin/tui";
 import { SyntaxStyle } from "@opentui/core";
 import { Match, Show, Switch, createEffect, createSignal, onCleanup, onMount } from "solid-js";
@@ -44,7 +44,27 @@ var FILETYPES = {
   cts: "typescript",
   tsx: "typescriptreact",
   md: "markdown",
-  zig: "zig"
+  zig: "zig",
+  py: "python",
+  rs: "rust",
+  c: "c",
+  h: "c",
+  cpp: "cpp",
+  cc: "cpp",
+  cxx: "cpp",
+  hpp: "cpp",
+  hh: "cpp",
+  hxx: "cpp",
+  go: "go",
+  java: "java",
+  kt: "kotlin",
+  kts: "kotlin",
+  swift: "swift",
+  m: "objc",
+  mm: "objc",
+  yaml: "yaml",
+  yml: "yaml",
+  toml: "toml"
 };
 function hexdump(buf, limit = 4096) {
   const view = buf.subarray(0, limit);
@@ -140,7 +160,7 @@ var dataHandler = {
     const ext = path.split(".").pop()?.toLowerCase();
     if (ext === "json") {
       try {
-        return { kind: "code", content: JSON.stringify(JSON.parse(text), null, 2) };
+        return { kind: "code", content: JSON.stringify(JSON.parse(text), null, 2), filetype: "json" };
       } catch {
         return { kind: "code", content: text };
       }
@@ -258,21 +278,34 @@ var documentHandler = {
 };
 
 // src/handlers/image.ts
-import { readFile as readFile4 } from "fs/promises";
+import { readFile as readFile4, stat as stat4 } from "fs/promises";
 import * as mupdf2 from "mupdf";
-var NATIVE = new Set(["png", "jpg", "jpeg", "webp", "gif"]);
-var EXTENSIONS3 = [...NATIVE, "bmp", "tif", "tiff"];
+import { GifReader } from "omggif";
+var NATIVE = new Set(["png", "jpg", "jpeg", "webp"]);
+var FALLBACK_LONG_EDGE = 1400;
+var MAX_GIF_FRAMES = 240;
+var MIN_FRAME_DELAY_MS = 20;
+var EXTENSIONS3 = [...NATIVE, "gif", "bmp", "tif", "tiff"];
 var imageHandler = {
   id: "image",
   extensions: EXTENSIONS3,
-  async load(path) {
+  async load(path, target) {
     const ext = path.split(".").pop()?.toLowerCase();
     if (ext !== undefined && NATIVE.has(ext))
       return { kind: "image", path };
-    return { kind: "image", path: await decodedPng(path) };
+    const longEdge = target?.longEdge ?? FALLBACK_LONG_EDGE;
+    if (ext === "gif")
+      return await gifFrames(path);
+    return { kind: "image", path: await decodedPng(path, longEdge) };
   }
 };
-async function decodedPng(file) {
+async function fileExists(file) {
+  return await stat4(file).then((info) => info.isFile(), () => false);
+}
+function frameFile(dir, index) {
+  return `${dir}/frame-${String(index + 1).padStart(4, "0")}.png`;
+}
+async function decodedPng(file, longEdge) {
   const key = await fileKey(file);
   const cached = await cachedFile(key, "decoded.png");
   if (cached)
@@ -282,13 +315,81 @@ async function decodedPng(file) {
   try {
     const pixmap = image.toPixmap();
     try {
-      return await writeCacheFile(key, "decoded.png", pixmap.asPNG());
+      const natural = Math.max(pixmap.getWidth(), pixmap.getHeight()) || longEdge;
+      const data = natural > longEdge ? await renderScaledPng(image, Math.round(pixmap.getWidth() * longEdge / natural), Math.round(pixmap.getHeight() * longEdge / natural)) : pixmap.asPNG();
+      return await writeCacheFile(key, "decoded.png", data);
     } finally {
       pixmap.destroy();
     }
   } finally {
     image.destroy();
   }
+}
+async function renderScaledPng(image, width, height) {
+  const pixmap = new mupdf2.Pixmap(mupdf2.ColorSpace.DeviceRGB, [0, 0, width, height], true);
+  try {
+    const device = new mupdf2.DrawDevice(mupdf2.Matrix.identity, pixmap);
+    try {
+      device.fillImage(image, mupdf2.Matrix.scale(width, height), 1);
+      device.close();
+    } finally {
+      device.destroy();
+    }
+    return pixmap.asPNG();
+  } finally {
+    pixmap.destroy();
+  }
+}
+async function gifFrames(file) {
+  const key = await fileKey(file);
+  const meta = await cachedFile(key, "frames.json");
+  const dir = await cacheDir(key);
+  if (meta) {
+    try {
+      const delays = JSON.parse(await readFile4(meta, "utf8"));
+      const frames = await frameContent(dir, delays, true);
+      if (frames)
+        return frames;
+    } catch {}
+  }
+  const reader = new GifReader(new Uint8Array(await readFile4(file)));
+  pruneCache();
+  const count = Math.min(reader.numFrames(), MAX_GIF_FRAMES);
+  if (count === 0)
+    throw new Error("GIF has no frames");
+  const { width, height } = reader;
+  const pixmap = new mupdf2.Pixmap(mupdf2.ColorSpace.DeviceRGB, [0, 0, width, height], true);
+  const delays = [];
+  try {
+    for (let index = 0;index < count; index++) {
+      const pixels = new Uint8ClampedArray(width * height * 4);
+      reader.decodeAndBlitFrameRGBA(index, pixels);
+      pixmap.getPixels().set(pixels);
+      delays.push(Math.max(MIN_FRAME_DELAY_MS, reader.frameInfo(index).delay * 10));
+      await writeCacheFile(key, `frame-${String(index + 1).padStart(4, "0")}.png`, pixmap.asPNG());
+    }
+  } finally {
+    pixmap.destroy();
+  }
+  if (count === 1)
+    return { kind: "image", path: frameFile(dir, 0) };
+  await writeCacheFile(key, "frames.json", new TextEncoder().encode(JSON.stringify(delays)));
+  const frames = await frameContent(dir, delays, false);
+  if (!frames)
+    throw new Error("failed to build decoded GIF frame list");
+  return frames;
+}
+async function frameContent(dir, delays, verifyFiles) {
+  const frames = [];
+  for (let index = 0;index < delays.length; index++) {
+    const file = frameFile(dir, index);
+    if (verifyFiles && !await fileExists(file))
+      return;
+    frames.push({ path: file, delayMs: delays[index] });
+  }
+  if (delays.length <= 1)
+    return;
+  return { kind: "animation", frames };
 }
 
 // src/handlers/markdown.ts
@@ -304,7 +405,7 @@ var markdownHandler = {
 
 // src/handlers/office.ts
 import { existsSync } from "fs";
-import { stat as stat4 } from "fs/promises";
+import { stat as stat5 } from "fs/promises";
 import path2 from "path";
 var EXTENSIONS5 = ["docx", "doc", "pptx", "ppt", "xlsx", "xls", "odt", "ods", "odp", "rtf", "svg"];
 function sofficeBinary() {
@@ -338,7 +439,7 @@ async function convertToPdf(file, key) {
     clearTimeout(timeout);
   }
   const converted = path2.join(dir, `${base}.pdf`);
-  await stat4(converted);
+  await stat5(converted);
   return converted;
 }
 var officeHandler = {
@@ -382,16 +483,44 @@ var FileViewerRpc = {
   }
 };
 
+// src/lib/grammars.ts
+import path3 from "path";
+import { addDefaultParsers } from "@opentui/core";
+var GRAMMARS = [
+  { filetype: "python", wasm: "python", aliases: ["py"] },
+  { filetype: "rust", wasm: "rust", aliases: ["rs"] },
+  { filetype: "c", wasm: "c", aliases: [] },
+  { filetype: "cpp", wasm: "cpp", aliases: [] },
+  { filetype: "go", wasm: "go", aliases: [] },
+  { filetype: "java", wasm: "java", aliases: [] },
+  { filetype: "kotlin", wasm: "kotlin", aliases: ["kt"] },
+  { filetype: "swift", wasm: "swift", aliases: [] },
+  { filetype: "objc", wasm: "objc", aliases: [] },
+  { filetype: "json", wasm: "json", aliases: [] },
+  { filetype: "yaml", wasm: "yaml", aliases: ["yml"] },
+  { filetype: "toml", wasm: "toml", aliases: [] }
+];
+function registerGrammars(pluginDirectory) {
+  const grammars = path3.join(pluginDirectory, "assets", "grammars");
+  addDefaultParsers(GRAMMARS.map((grammar) => ({
+    filetype: grammar.filetype,
+    aliases: [...grammar.aliases],
+    wasm: path3.join(grammars, grammar.filetype, `tree-sitter-${grammar.wasm}.wasm`),
+    queries: { highlights: [path3.join(grammars, grammar.filetype, "highlights.scm")] }
+  })));
+}
+
 // src/tui.tsx
 var PANEL_NAME = "fileviewer.view";
 var COMMAND_PREFIX = "fileviewer.";
+registerGrammars(import.meta.dir);
 function expandPath(raw, base) {
-  const expanded = raw.startsWith("~") ? path3.join(os2.homedir(), raw.slice(1)) : raw;
-  return path3.resolve(base ?? process.cwd(), expanded);
+  const expanded = raw.startsWith("~") ? path4.join(os2.homedir(), raw.slice(1)) : raw;
+  return path4.resolve(base ?? process.cwd(), expanded);
 }
 async function isFile(file) {
   try {
-    return (await stat5(file)).isFile();
+    return (await stat6(file)).isFile();
   } catch {
     return false;
   }
@@ -427,7 +556,7 @@ async function pickFile(directory, context) {
     return ext !== undefined && knownExtensions.includes(ext);
   }).slice(0, 500).sort((a, b) => a.name.localeCompare(b.name)).map((entry) => ({
     title: entry.name,
-    value: path3.join(dir, entry.name)
+    value: path4.join(dir, entry.name)
   }));
   if (options.length === 0) {
     context.ui.toast.show({
@@ -661,7 +790,7 @@ function Viewer(props) {
         title: "Page down",
         bind: "pagedown",
         run: () => {
-          if (content()?.kind === "pages")
+          if (isPaged())
             setPage((p) => p + 1);
           else
             scrollbox?.scrollBy(1, "viewport");
@@ -671,7 +800,7 @@ function Viewer(props) {
         title: "Page up",
         bind: "pageup",
         run: () => {
-          if (content()?.kind === "pages")
+          if (isPaged())
             setPage((p) => Math.max(0, p - 1));
           else
             scrollbox?.scrollBy(-1, "viewport");
@@ -689,7 +818,7 @@ function Viewer(props) {
         title: "Scroll down",
         bind: "down",
         run: () => {
-          if (content()?.kind === "pages")
+          if (isPaged())
             setPage((p) => p + 1);
           else
             scrollbox?.scrollBy(3);
@@ -699,7 +828,7 @@ function Viewer(props) {
         title: "Scroll up",
         bind: "up",
         run: () => {
-          if (content()?.kind === "pages")
+          if (isPaged())
             setPage((p) => Math.max(0, p - 1));
           else
             scrollbox?.scrollBy(-3);
@@ -747,7 +876,7 @@ function Viewer(props) {
       setError("no file selected \u2014 use /view <path>");
       return;
     }
-    setFileLabel(path3.basename(file));
+    setFileLabel(path4.basename(file));
     setStatus("loading");
     setError("");
     setPage(0);
@@ -755,10 +884,15 @@ function Viewer(props) {
     try {
       const handler = pickHandler(file);
       setHandlerId(handler.id);
-      const loaded = await handler.load(file);
+      const resolution = context.renderer.resolution;
+      const longEdge = resolution ? Math.max(resolution.width, resolution.height) : undefined;
+      const loaded = await handler.load(file, longEdge ? {
+        longEdge: Math.min(longEdge, 1400)
+      } : undefined);
       setContent(loaded);
-      if (loaded.kind === "pages")
-        setPageCount(loaded.count);
+      const count = loaded.kind === "pages" ? loaded.count : loaded.kind === "animation" ? loaded.frames.length : undefined;
+      if (count !== undefined)
+        setPageCount(count);
       setStatus("ready");
     } catch (cause) {
       setStatus("error");
@@ -767,25 +901,44 @@ function Viewer(props) {
   }
   createEffect(() => {
     const loaded = content();
-    if (loaded?.kind !== "pages")
-      return;
-    const index = Math.min(Math.max(page(), 0), loaded.count - 1);
-    setPageBusy(true);
-    loaded.pagePath(index).then((image) => {
-      if (page() === index) {
-        setPageImage(image);
-        setPageBusy(false);
-      }
-    }).catch((cause) => {
-      setStatus("error");
-      setError(cause instanceof Error ? cause.message : String(cause));
-    });
+    if (loaded?.kind === "pages") {
+      const index = Math.min(Math.max(page(), 0), loaded.count - 1);
+      setPageBusy(true);
+      loaded.pagePath(index).then((image) => {
+        if (page() === index) {
+          setPageImage(image);
+          setPageBusy(false);
+        }
+      }).catch((cause) => {
+        setStatus("error");
+        setError(cause instanceof Error ? cause.message : String(cause));
+      });
+    } else if (loaded?.kind === "animation") {
+      const index = Math.min(Math.max(page(), 0), loaded.frames.length - 1);
+      setPageImage(loaded.frames[index].path);
+    }
   });
+  createEffect(() => {
+    const loaded = content();
+    if (loaded?.kind !== "animation")
+      return;
+    const delayMs = Math.max(20, loaded.frames[Math.min(Math.max(page(), 0), loaded.frames.length - 1)]?.delayMs ?? 100);
+    const timer = setTimeout(() => {
+      setPage((pageValue) => (pageValue + 1) % loaded.frames.length);
+    }, delayMs);
+    onCleanup(() => clearTimeout(timer));
+  });
+  const isPaged = () => {
+    const kind = content()?.kind;
+    return kind === "pages" || kind === "animation";
+  };
   const pageInfo = () => {
     const loaded = content();
-    if (loaded?.kind !== "pages")
-      return;
-    return `${Math.min(page(), loaded.count - 1) + 1}/${loaded.count}`;
+    if (loaded?.kind === "pages")
+      return `${Math.min(page(), loaded.count - 1) + 1}/${loaded.count}`;
+    if (loaded?.kind === "animation")
+      return `${Math.min(page(), loaded.frames.length - 1) + 1}/${loaded.frames.length}`;
+    return;
   };
   return (() => {
     var _el$ = _$createElement("box"), _el$2 = _$createElement("box"), _el$12 = _$createElement("box"), _el$13 = _$createElement("text"), _el$16 = _$createElement("text");
@@ -848,7 +1001,7 @@ function Viewer(props) {
           }
         }), _$createComponent(Match, {
           get when() {
-            return content()?.kind === "pages";
+            return content()?.kind === "pages" || content()?.kind === "animation";
           },
           get children() {
             return _$createComponent(Show, {

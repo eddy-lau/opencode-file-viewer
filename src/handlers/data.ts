@@ -68,7 +68,7 @@ export const dataHandler: ViewerHandler = {
     const ext = path.split(".").pop()?.toLowerCase()
     if (ext === "json") {
       try {
-        return { kind: "code", content: JSON.stringify(JSON.parse(text), null, 2) }
+        return { kind: "code", content: JSON.stringify(JSON.parse(text), null, 2), filetype: "json" }
       } catch {
         // not valid JSON — fall through to raw text
         return { kind: "code", content: text }

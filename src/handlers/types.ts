@@ -7,6 +7,11 @@ export type ViewContent =
       /** Renders one page (0-based) to a PNG path; may do slow work on first call. */
       readonly pagePath: (index: number) => Promise<string>
     }
+  | {
+      readonly kind: "animation"
+      /** Pre-decoded frames (PNG paths), looping in the listed order. */
+      readonly frames: readonly { readonly path: string; readonly delayMs: number }[]
+    }
   | { readonly kind: "markdown"; readonly content: string }
   | { readonly kind: "code"; readonly content: string; readonly filetype?: string }
 
@@ -15,5 +20,10 @@ export interface ViewerHandler {
   readonly id: string
   /** File extensions (without dot) this handler claims. Empty = fallback. */
   readonly extensions: readonly string[]
-  load(path: string): Promise<ViewContent>
+  /**
+   * Optional render target: cap the longest image edge at this pixel count so
+   * decoded (BMP/TIFF) assets aren't cached far larger than any terminal shows.
+   * Handlers may ignore it; native passthroughs do.
+   */
+  load(path: string, target?: { longEdge: number }): Promise<ViewContent>
 }

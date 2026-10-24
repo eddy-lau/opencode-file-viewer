@@ -7,10 +7,15 @@ import { SyntaxStyle, type ScrollBoxRenderable } from "@opentui/core"
 import { For, Match, Show, Switch, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { knownExtensions, pickHandler } from "./handlers/registry"
 import { FileViewerRpc } from "./rpc"
+import { registerGrammars } from "./lib/grammars"
 import type { ViewContent } from "./handlers/types"
 
 const PANEL_NAME = "fileviewer.view"
 const COMMAND_PREFIX = "fileviewer."
+
+// Runtime tree-sitter grammars (python/rust/c/cpp/go/java/kotlin/swift/objc/json/yaml/toml).
+// Top level: the worker snapshots default parsers at first client init, before any panel.
+registerGrammars(import.meta.dir)
 
 function expandPath(raw: string, base: string | undefined): string {
   const expanded = raw.startsWith("~") ? path.join(os.homedir(), raw.slice(1)) : raw
@@ -206,7 +211,7 @@ function Viewer(props: { panel: PanelInput }) {
           title: "Page down",
           bind: "pagedown",
           run: () => {
-            if (content()?.kind === "pages") setPage((p) => p + 1)
+            if (isPaged()) setPage((p) => p + 1)
             else scrollbox?.scrollBy(1, "viewport")
           },
         },
@@ -215,7 +220,7 @@ function Viewer(props: { panel: PanelInput }) {
           title: "Page up",
           bind: "pageup",
           run: () => {
-            if (content()?.kind === "pages") setPage((p) => Math.max(0, p - 1))
+            if (isPaged()) setPage((p) => Math.max(0, p - 1))
             else scrollbox?.scrollBy(-1, "viewport")
           },
         },
@@ -226,7 +231,7 @@ function Viewer(props: { panel: PanelInput }) {
           title: "Scroll down",
           bind: "down",
           run: () => {
-            if (content()?.kind === "pages") setPage((p) => p + 1)
+            if (isPaged()) setPage((p) => p + 1)
             else scrollbox?.scrollBy(3)
           },
         },
@@ -235,7 +240,7 @@ function Viewer(props: { panel: PanelInput }) {
           title: "Scroll up",
           bind: "up",
           run: () => {
-            if (content()?.kind === "pages") setPage((p) => Math.max(0, p - 1))
+            if (isPaged()) setPage((p) => Math.max(0, p - 1))
             else scrollbox?.scrollBy(-3)
           },
         },
@@ -284,9 +289,15 @@ function Viewer(props: { panel: PanelInput }) {
     try {
       const handler = pickHandler(file)
       setHandlerId(handler.id)
-      const loaded = await handler.load(file)
+      // Cap decoded images (BMP/TIFF) at the terminal's pixel geometry so
+      // sources never render larger than the panel can show; falls back
+      // inside the handler to a fixed ~150dpi target when unknown.
+      const resolution = context.renderer.resolution
+      const longEdge = resolution ? Math.max(resolution.width, resolution.height) : undefined
+      const loaded = await handler.load(file, longEdge ? { longEdge: Math.min(longEdge, 1400) } : undefined)
       setContent(loaded)
-      if (loaded.kind === "pages") setPageCount(loaded.count)
+      const count = loaded.kind === "pages" ? loaded.count : loaded.kind === "animation" ? loaded.frames.length : undefined
+      if (count !== undefined) setPageCount(count)
       setStatus("ready")
     } catch (cause) {
       setStatus("error")
@@ -297,28 +308,52 @@ function Viewer(props: { panel: PanelInput }) {
   // Render pages lazily: pagePath may convert a whole page on first visit.
   createEffect(() => {
     const loaded = content()
-    if (loaded?.kind !== "pages") return
-    const index = Math.min(Math.max(page(), 0), loaded.count - 1)
-    setPageBusy(true)
-    loaded
-      .pagePath(index)
-      .then((image) => {
-        // ignore stale renders after rapid paging
-        if (page() === index) {
-          setPageImage(image)
-          setPageBusy(false)
-        }
-      })
-      .catch((cause) => {
-        setStatus("error")
-        setError(cause instanceof Error ? cause.message : String(cause))
-      })
+    if (loaded?.kind === "pages") {
+      const index = Math.min(Math.max(page(), 0), loaded.count - 1)
+      setPageBusy(true)
+      loaded
+        .pagePath(index)
+        .then((image) => {
+          // ignore stale renders after rapid paging
+          if (page() === index) {
+            setPageImage(image)
+            setPageBusy(false)
+          }
+        })
+        .catch((cause) => {
+          setStatus("error")
+          setError(cause instanceof Error ? cause.message : String(cause))
+        })
+    } else if (loaded?.kind === "animation") {
+      const index = Math.min(Math.max(page(), 0), loaded.frames.length - 1)
+      setPageImage(loaded.frames[index]!.path)
+    }
   })
+
+  // Animated GIFs: the handler decoded every frame; advance on its own delays.
+  createEffect(() => {
+    const loaded = content()
+    if (loaded?.kind !== "animation") return
+    const delayMs = Math.max(
+      20,
+      (loaded.frames[Math.min(Math.max(page(), 0), loaded.frames.length - 1)]?.delayMs) ?? 100,
+    )
+    const timer = setTimeout(() => {
+      setPage((pageValue) => (pageValue + 1) % loaded.frames.length)
+    }, delayMs)
+    onCleanup(() => clearTimeout(timer))
+  })
+
+  const isPaged = (): boolean => {
+    const kind = content()?.kind
+    return kind === "pages" || kind === "animation"
+  }
 
   const pageInfo = () => {
     const loaded = content()
-    if (loaded?.kind !== "pages") return undefined
-    return `${Math.min(page(), loaded.count - 1) + 1}/${loaded.count}`
+    if (loaded?.kind === "pages") return `${Math.min(page(), loaded.count - 1) + 1}/${loaded.count}`
+    if (loaded?.kind === "animation") return `${Math.min(page(), loaded.frames.length - 1) + 1}/${loaded.frames.length}`
+    return undefined
   }
 
   return (
@@ -344,7 +379,7 @@ function Viewer(props: { panel: PanelInput }) {
               style={{ width: "100%", height: "100%" }}
             />
           </Match>
-          <Match when={content()?.kind === "pages"}>
+          <Match when={content()?.kind === "pages" || content()?.kind === "animation"}>
             <Show
               when={pageImage()}
               fallback={
