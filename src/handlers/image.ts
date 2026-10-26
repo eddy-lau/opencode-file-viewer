@@ -4,8 +4,11 @@ import { GifReader } from "omggif"
 import { cachedFile, cacheDir, fileKey, pruneCache, writeCacheFile } from "../lib/cache"
 import type { ViewContent, ViewerHandler } from "./types"
 
-/** Formats OpenTUI's image pipeline can render from the file directly. */
-const NATIVE = new Set(["png", "jpg", "jpeg", "webp"])
+/** Formats OpenTUI's image pipeline can render from the file directly. PNG/WebP
+ * proven stable; JPEG is NOT: pass-through (in contrast to BMP/TIFF) decodes
+ * via mupdf instead — image renderables have stalled the TUI on some
+ * JPEGs (300-DPI Photoshop metadata observed) and mupdf's decode is safe. */
+const NATIVE = new Set(["png", "webp"])
 
 /** Default pixel cap for the longest image edge when no target is given (~150dpi letter). */
 const FALLBACK_LONG_EDGE = 1400
@@ -21,7 +24,7 @@ const MIN_FRAME_DELAY_MS = 20
  * omggif (mupdf has no frame API; OpenTUI's image component is static-only).
  * HEIC is not handled at all (mupdf can't decode it either; use `o` external open).
  */
-const EXTENSIONS = [...NATIVE, "gif", "bmp", "tif", "tiff"] as const
+const EXTENSIONS = [...NATIVE, "gif", "jpg", "jpeg", "bmp", "tif", "tiff"] as const
 
 export const imageHandler: ViewerHandler = {
   id: "image",

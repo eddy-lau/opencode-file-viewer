@@ -281,11 +281,11 @@ var documentHandler = {
 import { readFile as readFile4, stat as stat4 } from "fs/promises";
 import * as mupdf2 from "mupdf";
 import { GifReader } from "omggif";
-var NATIVE = new Set(["png", "jpg", "jpeg", "webp"]);
+var NATIVE = new Set(["png", "webp"]);
 var FALLBACK_LONG_EDGE = 1400;
 var MAX_GIF_FRAMES = 240;
 var MIN_FRAME_DELAY_MS = 20;
-var EXTENSIONS3 = [...NATIVE, "gif", "bmp", "tif", "tiff"];
+var EXTENSIONS3 = [...NATIVE, "gif", "jpg", "jpeg", "bmp", "tif", "tiff"];
 var imageHandler = {
   id: "image",
   extensions: EXTENSIONS3,

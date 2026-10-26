@@ -4,12 +4,15 @@ An [OpenCode](https://opencode.ai) **2.x** plugin that views files inline in the
 
 Rendering uses [OpenTUI](https://opentui.com)'s image pipeline: Kitty graphics protocol (Kitty, Ghostty, WezTerm), Sixel, or a Unicode-block fallback on terminals without graphics support.
 
+![opencode-file-viewer: the agent opens a Nebula image in an inline viewer panel next to the chat](docs/screenshot.jpg)
+
 ## Formats
 
 | Formats | Pipeline | Notes |
 | --- | --- | --- |
-| PNG, JPEG, WebP, GIF | direct render | full fidelity; animated GIFs autoplay in-panel |
-| BMP, TIFF | [mupdf](https://mupdfjs.readthedocs.io) → PNG | decoded once, cached (terminal can't display them natively) |
+| PNG, WebP | direct render | full fidelity |
+| JPEG, BMP, TIFF | [mupdf](https://mupdfjs.readthedocs.io) → PNG | decoded once, capped at terminal pixel geometry (terminal decoders are unreliable; direct JPEG render has stalled the TUI) |
+| GIF | direct (static) / omggif (animated) | animated GIFs autoplay in-panel on their own delays |
 | PDF | [mupdf](https://mupdfjs.readthedocs.io) (WASM) | pages render lazily, on demand |
 | EPUB, CBZ | mupdf (WASM) | paged view |
 | DOCX, PPTX, XLSX, DOC, PPT, XLS, ODT, ODS, ODP, RTF, SVG | LibreOffice → PDF → mupdf | requires `soffice` on PATH (`brew install --cask libreoffice`); first conversion takes a few seconds |
@@ -84,7 +87,7 @@ Two halves in one package (both loaded as one plugin):
 
 Formats are handled by a small registry (`src/handlers/`). Each handler maps a file to one of four content kinds the panel renders:
 
-- `image` — a single image path, rendered via `<image>` (BMP/TIFF decode to cached PNG, capped at terminal pixel geometry; animated GIFs decode to per-frame PNGs via `omggif` and autoplay)
+- `image` — a single image path, rendered via `<image>`; JPEG/BMP/TIFF decode to cached PNGs capped at terminal pixel geometry, animated GIFs decode to per-frame PNGs via `omggif` and autoplay
 - `pages` — lazy per-page PNGs (PDF/EPUB/office), rendered via `<image>` with paging
 - `animation` — decoded GIF frames; the panel advances on the GIF's own delays, `←→` step manually
 - `markdown` — raw markdown, rendered via `<markdown>`
@@ -116,7 +119,7 @@ bun run smoke      # conversion pipeline smoke test (fixture paths from argv)
 - The viewer's keymap layer is active while the panel is open; `h/j/k/l` are taken by it
 - mupdf's WASM build has no SVG document handler, so SVG goes through LibreOffice- Animated GIFs autoplay (decoded per-frame; frames capped at 240 for pathological files)
 - HEIC is not handled (mupdf can't decode it — use `o` for those)
-- Native images (PNG/JPEG/WebP/GIF) render pass-through at full resolution scaled to fit; BMP/TIFF decodes are capped at the terminal's pixel geometry (fallback ~1400px)
+- Native PNG/WebP images render pass-through at full resolution scaled to fit; JPEG/BMP/TIFF decodes are capped at the terminal's pixel geometry (fallback ~1400px)
 - Syntax-highlighted fences cover the bundled Tree-sitter grammars (js/ts/jsx/tsx/md/zig); other languages render plain
 
 ## Roadmap
