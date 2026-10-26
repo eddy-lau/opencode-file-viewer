@@ -4,7 +4,8 @@ An [OpenCode](https://opencode.ai) **2.x** plugin that views files inline in the
 
 Rendering uses [OpenTUI](https://opentui.com)'s image pipeline: Kitty graphics protocol (Kitty, Ghostty, WezTerm), Sixel, or a Unicode-block fallback on terminals without graphics support.
 
-![opencode-file-viewer: the agent opens a Nebula image in an inline viewer panel next to the chat](docs/screenshot.jpg)
+![opencode-file-viewer: the agent opens a nebula image in an inline viewer panel next to the chat](docs/screenshot.jpg)
+<!-- Image content: NASA/ESA/CSA/STScI, James Webb Space Telescope NIRCam+MIRI composite (public domain) -->
 
 ## Formats
 
