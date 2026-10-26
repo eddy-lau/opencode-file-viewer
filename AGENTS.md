@@ -10,12 +10,17 @@ OpenCode TUI plugin (Bun + TypeScript + Solid via OpenTUI). No bundler/watch con
 - After changing `src/tui.tsx`: `bun run tui`, and commit `tui.js` together with the source change. For testing via a Git install, `git push` then `opencode plugin update`.
 - **Handler/registry changes are NOT "server-half only"**: `tui.tsx` imports `pickHandler`/`registry`, so the TUI binary contains the handler code too — any handler edit needs `bun run tui` + committed `tui.js` or the panel keeps the old logic (burned time: image.ts change without rebuild made the panel hexdump BMPs via the stale fallback).
 
-## Local dev loop (how the checkout is actually loaded)
+## Runtime install vs dev checkout (how this machine loads the plugin)
 
-- A discovery symlink `~/.config/opencode/plugins/opencode-file-viewer` → this checkout loads both halves. The global `opencode.json` `plugins` array stays `[]` — pointing both at the same plugin causes a duplicate-ID conflict (plugin shows as "failed").
+- **Baseline on this machine (2026-10-26): the real GitHub install** — global `opencode.json` `plugins: ["github:eddy-lau/opencode-file-viewer"]`, verified active via `opencode api get /api/plugin` → `source.type: "package", status: "active"`. This is what users get; keep it as the default state.
+- **Dev swap** (for editing + hot reload): remove the `"github:..."` entry from the `plugins` array in `~/.config/opencode/opencode.json`, then restore the discovery symlink parked at `/tmp/ofv-symlink-backup` (move it back to `~/.config/opencode/plugins/opencode-file-viewer`). **Never have both active** — pointing both at the same plugin causes a duplicate-ID conflict (plugin shows as "failed").
 - TUI hot-reload: OpenCode watches the plugin and reconciles on source/config changes. If it doesn't pick up a rebuild, touch `~/.config/opencode/cli.json` to force re-reconcile, or restart the TUI.
 - Verify load state with `opencode api get /api/plugin` (expect `opencode.file-viewer | active | {"server": true, "tui": true}`). The `opencode plugin list` CLI shows only package plugins, **not** local-dir ones.
-- `opencode plugin add` against this repo has hit `NpmInstallFailedError: git dep preparation failed` before; the symlink is the reliable path.
+- Dev edits reach users only via push + `opencode plugin update` (the install re-resolves the git revision).
+
+## `scripts.build` is forbidden (breaks `opencode plugin add`)
+
+- package.json must NOT have scripts named `build`/`preinstall`/`install`/`postinstall`/`prepack`/`prepare`. pacote's git fetcher (npm-used by OpenCode) treats such a repo as "needs preparation" and spawns an embedded `npm install` child; under OpenCode that child runs with the opencode binary itself as node and mis-executes into opencode's own CLI, exiting nonzero → `NpmInstallFailedError: git dep preparation failed` for every user running `opencode plugin add github:eddy-lau/opencode-file-viewer`. The build script is named `tui` (`bun run tui`) for this reason — burned time twice before root-causing.
 
 ## Plugin resolution quirk
 
