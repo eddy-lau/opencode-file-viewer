@@ -103,7 +103,7 @@ Conversions are cached under `os.tmpdir()/opencode-file-viewer/<sha1(path+mtime+
 The TUI entry ships **precompiled** (`tui.js` at the repo root) — OpenCode's plugin loader transpiles plugin TSX with default React JSX and ignores per-plugin tsconfigs, so raw `.tsx` fails to load at runtime. `build.ts` uses `@opentui/solid`'s Bun plugin for the real JSX transform and fails if the result still contains `jsxDEV`/`jsx-runtime`. After editing `src/tui.tsx`:
 
 ```sh
-bun run build      # requires bun; regenerates tui.js and must be committed with the source change
+bun run tui      # requires bun; regenerates tui.js and must be committed with the source change
 bunx tsc --noEmit  # typecheck
 bun run smoke      # conversion pipeline smoke test (fixture paths from argv)
 ```

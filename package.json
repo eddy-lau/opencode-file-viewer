@@ -22,8 +22,8 @@
     "./tui": "./tui.js"
   },
   "scripts": {
-    "build": "bun build.ts",
-    "smoke": "bun test/smoke.ts"
+    "smoke": "bun test/smoke.ts",
+    "tui": "bun build.ts"
   },
   "dependencies": {
     "@opencode/plugin": "latest",
@@ -36,12 +36,12 @@
     "solid-js": ">=1.9.0"
   },
   "devDependencies": {
+    "@opencode/theme": "2.1.4",
+    "@opentui/core": "^0.6.8",
+    "@opentui/solid": "^0.6.8",
     "@types/bun": "^1.4.4",
     "solid-js": "^1.9.0",
-    "typescript": "^5.6.0"
-  },
-  "optionalDependencies": {
-    "@opentui/core": "^0.6.8",
-    "@opentui/solid": "^0.6.8"
+    "typescript": "^5.6.0",
+    "tree-sitter-wasms": "0.1.13"
   }
 }

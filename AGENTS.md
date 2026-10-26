@@ -4,11 +4,11 @@ OpenCode TUI plugin (Bun + TypeScript + Solid via OpenTUI). No bundler/watch con
 
 ## Build is mandatory and non-obvious
 
-- `tui.js` at the repo root is a **committed build artifact** compiled from `src/tui.tsx`. Editing the `.tsx` alone does nothing until `bun run build`.
+- `tui.js` at the repo root is a **committed build artifact** compiled from `src/tui.tsx`. Editing the `.tsx` alone does nothing until `bun run tui`.
 - Why precompiled: OpenCode's plugin loader transpiles plugin TSX with default React JSX semantics and ignores per-plugin tsconfigs; Solid needs getter-wrapped props, so raw `.tsx` breaks at runtime.
 - `build.ts` uses `@opentui/solid`'s Bun plugin for the real JSX transform and **fails the build** if output contains `jsxDEV`/`jsx-runtime` (i.e. Bun's builtin transform leaked through). That's why `tsconfig.build.json` is intentionally minimal/empty — it stands Bun's builtin JSX transform down. Don't "fix" the empty tsconfig or set `jsx` in it.
-- After changing `src/tui.tsx`: `bun run build`, and commit `tui.js` together with the source change. For testing via a Git install, `git push` then `opencode plugin update`.
-- **Handler/registry changes are NOT "server-half only"**: `tui.tsx` imports `pickHandler`/`registry`, so the TUI binary contains the handler code too — any handler edit needs `bun run build` + committed `tui.js` or the panel keeps the old logic (burned time: image.ts change without rebuild made the panel hexdump BMPs via the stale fallback).
+- After changing `src/tui.tsx`: `bun run tui`, and commit `tui.js` together with the source change. For testing via a Git install, `git push` then `opencode plugin update`.
+- **Handler/registry changes are NOT "server-half only"**: `tui.tsx` imports `pickHandler`/`registry`, so the TUI binary contains the handler code too — any handler edit needs `bun run tui` + committed `tui.js` or the panel keeps the old logic (burned time: image.ts change without rebuild made the panel hexdump BMPs via the stale fallback).
 
 ## Local dev loop (how the checkout is actually loaded)
 
